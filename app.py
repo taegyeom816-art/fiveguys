@@ -1,97 +1,134 @@
 import streamlit as st
+import pandas as pd
 
-# 페이지 기본 설정
-st.set_page_config(page_title="CareBridge 복약 안내 시스템", page_icon="💊", layout="centered")
+# 페이지 설정
+st.set_page_config(page_title="CareBridge - 개인 건강관리 서비스", page_icon="🏥", layout="wide")
 
-# 메인 타이틀
-st.title("💊 CareBridge 처방 약 복용 안내")
-st.markdown("처방받은 약의 이름을 검색하여 복용 방법과 주의사항을 확인하세요.")
-st.markdown("---")
-
-# CareBridge 복약안내문 기반 6가지 약품 데이터베이스
-medicine_db = {
-    "가상알레르정": {
-        "name": "가상알레르정 10mg",
-        "dose": "1정",
-        "frequency": "1일 3회",
-        "timing": "식후 30분에 복용하세요.",
-        "duration": "7일",
-        "precautions": "⚠️ [위장장애 주의 / 졸음 주의] 약 복용 후 졸음이 올 수 있으므로 운전이나 위험한 기계 조작은 피해주세요."
+# 가상 추출 데이터베이스 (보내주신 파일 데이터 연동)
+EXTRACTED_DATA = {
+    "health_01.pdf": {
+        "type": "health",
+        "date": "2026-09-10",
+        "data": [
+            {"검사항목": "체질량지수(BMI)", "결과값": "22.4", "단위": "kg/m²", "참고범위": "18.5-24.9", "비고": "검토용"},
+            {"검사항목": "수축기혈압", "결과값": "118", "단위": "mmHg", "참고범위": "90-119", "비고": "검토용"},
+            {"검사항목": "이완기혈압", "결과값": "76", "단위": "mmHg", "참고범위": "60-79", "비고": "검토용"},
+            {"검사항목": "공복혈당", "결과값": "92", "단위": "mg/dL", "참고범위": "70-99", "비고": "검토용"},
+            {"검사항목": "총콜레스테롤", "결과값": "182", "단위": "mg/dL", "참고범위": "0-199", "비고": "검토용"},
+            {"검사항목": "AST", "결과값": "22", "단위": "U/L", "참고범위": "0-40", "비고": "검토용"},
+            {"검사항목": "ALT", "결과값": "19", "단위": "U/L", "참고범위": "0-40", "비고": "검토용"}
+        ]
     },
-    "예시소화정": {
-        "name": "예시소화정",
-        "dose": "1정",
-        "frequency": "1일 2회 (아침, 저녁)",
-        "timing": "식전 30분에 복용하세요.",
-        "duration": "5일",
-        "precautions": "⚠️ [씹지 마세요] 약을 씹지 말고 통째로 삼켜서 복용하세요."
+    "health_02.pdf": {
+        "type": "health",
+        "date": "2026-09-18",
+        "data": [
+            {"검사항목": "체질량지수(BMI)", "결과값": "26.1", "단위": "kg/m²", "참고범위": "18.5-24.9", "비고": "범위 초과"},
+            {"검사항목": "수축기혈압", "결과값": "134", "단위": "mmHg", "참고범위": "90-119", "비고": "범위 초과"},
+            {"검사항목": "이완기혈압", "결과값": "84", "단위": "mmHg", "참고범위": "60-79", "비고": "범위 초과"},
+            {"검사항목": "공복혈당", "결과값": "110", "단위": "mg/dL", "참고범위": "70-99", "비고": "범위 초과"},
+            {"검사항목": "총콜레스테롤", "결과값": "223", "단위": "mg/dL", "참고범위": "0-199", "비고": "범위 초과"},
+            {"검사항목": "AST", "결과값": "29", "단위": "U/L", "참고범위": "0-40", "비고": "-"},
+            {"검사항목": "ALT", "결과값": "44", "단위": "U/L", "참고범위": "0-40", "비고": "범위 초과"}
+        ]
     },
-    "샘플비타민C정": {
-        "name": "샘플비타민C정",
-        "dose": "1정",
-        "frequency": "1일 1회",
-        "timing": "취침 전에 복용하세요.",
-        "duration": "14일",
-        "precautions": "✅ 충분한 물과 함께 복용하시면 좋습니다."
+    "health_03.pdf": {
+        "type": "health",
+        "date": "2026-10-02",
+        "data": [
+            {"검사항목": "체질량지수(BMI)", "결과값": "23.0", "단위": "kg/m²", "참고범위": "18.5-24.9", "비고": "-"},
+            {"검사항목": "수축기혈압", "결과값": "121", "단위": "mmHg", "참고범위": "90-119", "비고": "범위 초과"},
+            {"검사항목": "이완기혈압", "결과값": "측정값 미기재", "단위": "-", "참고범위": "60-79", "비고": "원문 누락 확인"},
+            {"검사항목": "공복혈당", "결과값": "측정값 미기재", "단위": "-", "참고범위": "70-99", "비고": "원문 누락 확인"},
+            {"검사항목": "총콜레스테롤", "결과값": "194", "단위": "mg/dL", "참고범위": "0-199", "비고": "-"},
+            {"검사항목": "AST", "결과값": "31", "단위": "U/L", "참고범위": "0-40", "비고": "-"},
+            {"검사항목": "ALT", "결과값": "측정값 미기재", "단위": "-", "참고범위": "0-40", "비고": "원문 누락 확인"}
+        ]
     },
-    "케어진통정": {
-        "name": "케어진통정 500mg",
-        "dose": "2정",
-        "frequency": "1일 3회",
-        "timing": "식사와 관계없이 복용하세요.",
-        "duration": "3일",
-        "precautions": "⚠️ [위장장애 주의] 식후에 복용하시면 위장 부담을 줄일 수 있습니다."
+    "med_01.pdf": {
+        "type": "med",
+        "date": "2026-10-01",
+        "data": [
+            {"약명": "가상시약-A정", "1회량": "1정", "횟수/일": "1", "일수": "3", "복용 시점": "아침 식후 30분", "주의사항": "문서에 기재된 주의사항 A 확인"},
+            {"약명": "가상시약-B캡슐", "1회량": "1캡슐", "횟수/일": "2", "일수": "3", "복용 시점": "아침, 저녁 식후", "주의사항": "문서에 기재된 주의사항 B 확인"},
+            {"약명": "가상시약-C정", "1회량": "1정", "횟수/일": "1", "일수": "3", "복용 시점": "저녁 식사와 함께", "주의사항": "임의로 분할하지 마세요"}
+        ]
     },
-    "브릿지항생정": {
-        "name": "브릿지항생정 250mg",
-        "dose": "1정",
-        "frequency": "1일 2회",
-        "timing": "식후 30분에 복용하세요.",
-        "duration": "7일",
-        "precautions": "⚠️ [임신(계획) 시 주의 / 일정 시간 복용] 증상이 좋아져도 임의로 중단하지 말고 처방된 기간 동안 끝까지 복용하세요."
+    "med_02.pdf": {
+        "type": "med",
+        "date": "2026-10-03",
+        "data": [
+            {"약명": "가상시약-D정", "1회량": "2정", "횟수/일": "1", "일수": "5", "복용 시점": "취침 전", "주의사항": "사용 전에 주의문구를 확인"},
+            {"약명": "가상시약-E산", "1회량": "1포", "횟수/일": "2", "일수": "5", "복용 시점": "식사와 관계없이", "주의사항": "복용 시간은 전문가에게 확인"}
+        ]
     },
-    "안심혈압정": {
-        "name": "안심혈압정 5mg",
-        "dose": "1정",
-        "frequency": "1일 1회",
-        "timing": "아침 식전 복용하세요.",
-        "duration": "30일",
-        "precautions": "⚠️ [근육통 주의 / 일정 시간 복용] 매일 일정한 시간에 복용해야 효과가 좋습니다."
+    "med_03.pdf": {
+        "type": "med",
+        "date": "2026-10-05",
+        "data": [
+            {"약명": "가상시약-F정", "1회량": "1정", "횟수/일": "미기재", "일수": "7", "복용 시점": "미기재", "주의사항": "복용 횟수 및 시점이 미기재되어 확인 필요"},
+            {"약명": "가상시약-G캡슐", "1회량": "1캡슐", "횟수/일": "1", "일수": "미기재", "복용 시점": "아침 식후", "주의사항": "복용 일수가 미기재되어 확인 필요"}
+        ]
     }
 }
 
-# 검색 기능 구현
-st.subheader("🔍 처방 약 검색")
-search_query = st.text_input("약 이름을 입력하세요 (예: 가상알레르정, 케어진통정, 안심혈압정 등)", "")
+# 세션 상태 초기화
+if 'uploaded_health' not in st.session_state:
+    st.session_state.uploaded_health = []
+if 'uploaded_med' not in st.session_state:
+    st.session_state.uploaded_med = []
 
-if search_query:
-    found = False
-    for key, info in medicine_db.items():
-        if search_query in key or search_query in info["name"]:
-            found = True
-            st.success(f"📌 **{info['name']}** 검색 결과입니다.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"⏱️ **복용 횟수:** {info['frequency']}")
-                st.write(f"🍽️ **복용 방법:** {info['timing']}")
-            with col2:
-                st.write(f"💊 **1회 투약량:** {info['dose']}")
-                st.write(f"📅 **복용 일수:** {info['duration']}")
-                
-            st.info(f"**주의사항 및 안내**\n\n{info['precautions']}")
-            st.markdown("---")
-            
-    if not found:
-        st.warning("❌ 일치하는 약 정보가 없습니다. 6가지 약 이름(가상알레르정, 예시소화정, 샘플비타민C정, 케어진통정, 브릿지항생정, 안심혈압정) 중 하나를 검색해 보세요.")
+st.title("🏥 CareBridge")
+st.markdown("#### 내 손안의 꼼꼼한 건강 비서: 문서 기반 개인 건강관리 서비스")
+st.caption("⚠️ **안내:** 본 서비스는 AI를 활용해 문서를 구조화하여 보여줄 뿐, 의학적 진단이나 처방 수정을 하지 않습니다. 누락·상충 정보는 원문을 대조하세요.")
+st.markdown("---")
 
-# 전체 6가지 약 목록 한눈에 보기
-with st.expander("📋 처방된 6가지 약 목록 전체보기"):
-    for key, info in medicine_db.items():
-        st.markdown(f"### {info['name']}")
-        st.write(f"- **복용법:** {info['frequency']} ({info['timing']}) / 총 {info['duration']}")
-        st.write(f"- **주의사항:** {info['precautions']}")
-        st.markdown("---")
+tab1, tab2, tab3 = st.tabs(["📂 1. 문서 업로드", "📊 2. 건강 정보 포트폴리오", "💊 3. 복약 일정 및 알림"])
 
-# 하단 푸터
-st.caption("※ 본 안내는 CareBridge 처방 기준 참고용이며, 특이증상이 발생할 경우 즉시 의사 또는 약사와 상담하세요.")
+with tab1:
+    st.subheader("의료 문서 업로드 (데모)")
+    st.markdown("AI가 문서를 분류하고 핵심 정보를 추출합니다. 테스트를 위해 가상 PDF 파일 이름을 선택해 업로드해보세요.")
+    
+    selected_file = st.selectbox("업로드할 파일 선택", ["선택 안함"] + list(EXTRACTED_DATA.keys()))
+    
+    if st.button("파일 업로드 및 분석 시작"):
+        if selected_file != "선택 안함":
+            with st.spinner("AI가 문서를 분석 중입니다 (Parse ➡️ Classify ➡️ Extract)..."):
+                data_info = EXTRACTED_DATA[selected_file]
+                if data_info["type"] == "health":
+                    st.session_state.uploaded_health.append(data_info)
+                else:
+                    st.session_state.uploaded_med.append(data_info)
+            st.success(f"✅ '{selected_file}' 문서 분류 및 구조화 완료! 각 탭에서 결과를 확인하세요.")
+        else:
+            st.warning("파일을 선택해주세요.")
+
+with tab2:
+    st.subheader("📊 개인 건강 정보 포트폴리오")
+    if not st.session_state.uploaded_health:
+        st.info("업로드된 건강검진 기록이 없습니다. '문서 업로드' 탭에서 건강검진 결과지(health_01 ~ 03)를 업로드하세요.")
+    else:
+        all_health_records = []
+        for h_data in st.session_state.uploaded_health:
+            date = h_data["date"]
+            for row in h_data["data"]:
+                row_copy = row.copy()
+                row_copy["검사 일자"] = date
+                all_health_records.append(row_copy)
+        
+        df_health = pd.DataFrame(all_health_records)
+        df_health = df_health[["검사 일자", "검사항목", "결과값", "단위", "참고범위", "비고"]]
+        st.dataframe(df_health, use_container_width=True)
+        st.caption("※ '측정값 미기재' 항목은 원문에 결과 수치가 없음을 뜻하며, AI가 임의로 채우지 않았습니다.")
+
+with tab3:
+    st.subheader("💊 복약 일정표 및 알림")
+    if not st.session_state.uploaded_med:
+        st.info("업로드된 복약안내문이 없습니다. '문서 업로드' 탭에서 약국 복약안내문(med_01 ~ 03)을 업로드하세요.")
+    else:
+        for m_data in st.session_state.uploaded_med:
+            date = m_data["date"]
+            with st.expander(f"📌 {date} 처방 약품 목록", expanded=True):
+                df_med = pd.DataFrame(m_data["data"])
+                st.dataframe(df_med, use_container_width=True)
+                st.caption("※ 미기재된 복용 횟수, 시점, 일수는 주의사항 항목에 확인 대상으로 명시되었습니다.")
