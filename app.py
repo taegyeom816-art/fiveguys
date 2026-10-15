@@ -1,101 +1,126 @@
 import streamlit as st
-import pandas as pd
-import time
+import google.generativeai as genai
+import tempfile
+import os
+import json
+from datetime import datetime
 
-# 페이지 기본 설정
-st.set_page_config(page_title="CareBridge - 개인 건강관리 서비스", page_icon="🏥", layout="wide")
+# 페이지 설정
+st.set_page_config(page_title="CareBridge - 진짜 개인 건강 비서", page_icon="🏥", layout="wide")
 
-# 세션 상태 초기화
-if 'analysis_type' not in st.session_state:
-    st.session_state.analysis_type = None
+# 사이드바: AI 엔진 연결 (API 키 입력)
+st.sidebar.title("⚙️ AI 설정")
+st.sidebar.markdown("CareBridge AI를 깨우기 위해 API 키를 입력해주세요.")
+api_key = st.sidebar.text_input("Gemini API Key", type="password")
+if api_key:
+    genai.configure(api_key=api_key)
+    st.sidebar.success("AI 엔진 연결 완료!")
+else:
+    st.sidebar.warning("API 키를 입력해야 분석이 시작됩니다.")
 
-st.title("🏥 CareBridge")
-st.markdown("#### 내 손안의 꼼꼼한 건강 비서: 문서 기반 개인 건강관리 서비스")
-st.caption("⚠️ 안내: 본 서비스는 AI를 활용해 어려운 건강 수치와 복약 안내를 쉽게 풀어 설명합니다. 진단이나 처방을 대체하지 않으며, 추가 확인이 필요한 사항은 반드시 전문가와 상의하세요.")
+st.title("🏥 CareBridge: 내 손안의 AI 건강 비서")
+st.markdown("어려운 건강검진 결과와 복잡한 약 봉투, 이제 사진이나 PDF로 올리기만 하세요. AI가 어르신과 아이들도 알기 쉽게 풀어서 설명해 드립니다.")
+st.caption("⚠️ 주의: AI의 분석 결과는 참고용이며, 정확한 진단과 처방은 반드시 의사/약사와 상담하세요.")
 st.markdown("---")
 
-tab1, tab2, tab3 = st.tabs(["📂 1. 의료 문서 직접 업로드", "💊 2. 복약안내 분석 결과", "📊 3. 건강검진 분석 결과"])
+# 문서 분석 프롬프트 (AI에게 내리는 엄격한 명령)
+SYSTEM_PROMPT = """
+당신은 'CareBridge'라는 친절한 의료 전문 AI 비서입니다.
+사용자가 올린 문서(건강검진 결과지 또는 복약안내문)를 읽고 아래의 JSON 형식으로만 정확히 대답하세요.
 
-# ==========================================
-# 탭 1: 실제 문서 업로드
-# ==========================================
-with tab1:
-    st.subheader("의료 문서 직접 업로드")
-    st.markdown("가지고 계신 건강검진 결과지나 약국 복약안내문을 직접 업로드해 주세요. (PDF, JPG, PNG 지원)")
-    
-    # 실제 파일 업로더 생성
-    uploaded_file = st.file_uploader("파일을 드래그하거나 클릭하여 업로드하세요.", type=["pdf", "jpg", "png", "jpeg"])
-    
-    if uploaded_file is not None:
-        st.success(f"📄 '{uploaded_file.name}' 파일이 성공적으로 업로드되었습니다.")
-        
-        st.markdown("**업로드한 문서의 종류에 맞게 분석 버튼을 눌러주세요:**")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💊 복약안내문으로 분석 시작", use_container_width=True):
-                with st.spinner("AI가 약품 정보와 복용법을 추출하고 있습니다..."):
-                    time.sleep(2) # 데모용 로딩 시뮬레이션
-                    st.session_state.analysis_type = "med"
-                st.success("분석 완료! '복약안내 분석 결과' 탭을 확인하세요.")
-        with col2:
-            if st.button("📊 건강검진 결과지로 분석 시작", use_container_width=True):
-                with st.spinner("AI가 검사 수치와 참고범위를 비교 분석하고 있습니다..."):
-                    time.sleep(2)
-                    st.session_state.analysis_type = "health"
-                st.success("분석 완료! '건강검진 분석 결과' 탭을 확인하세요.")
+[필수 규칙]
+1. 어려운 의학 용어는 초등학생이나 어르신도 이해할 수 있도록 아주 쉽고 따뜻한 비유를 들어 설명할 것.
+2. 문서에 없는 내용을 절대 지어내지 말 것. (미기재된 경우 '확인 필요'로 표기)
+3. 치료를 지시하거나 진단을 내리지 말 것.
 
-# ==========================================
-# 탭 2: 복약안내 분석 결과
-# ==========================================
-with tab2:
-    if st.session_state.analysis_type == "med":
-        st.subheader("💊 복약안내 분석 결과")
-        
-        # 1. 핵심 요약
-        st.info("💡 **핵심 요약**\n\n총 3가지 약품이 처방되었습니다. 아침 식후, 저녁 식후, 취침 전으로 복용 시점이 다르므로 시간에 맞춰 꼼꼼히 복용해 주세요.")
-        
-        # 2. 개별 약품에 대한 설명
-        st.markdown("### 🔍 개별 약품에 대한 설명")
-        med_data = [
-            {"약품명": "가상시약-A정", "1회 용량": "1정", "복용 시점": "아침 식후", "설명": "위장장애를 줄이기 위해 반드시 식후에 복용하세요."},
-            {"약품명": "가상시약-B캡슐", "1회 용량": "1캡슐", "복용 시점": "저녁 식후", "설명": "충분한 물과 함께 복용하는 것이 좋습니다."},
-            {"약품명": "가상시약-C정", "1회 용량": "2정", "복용 시점": "취침 전", "설명": "복용 후 졸음이 올 수 있으므로 취침 전에 복용하세요."}
-        ]
-        st.dataframe(pd.DataFrame(med_data), use_container_width=True)
-        
-        # 3. 추가 확인이 필요한 사항
-        st.markdown("### ⚠️ 추가 확인이 필요한 사항")
-        st.error("""
-        - **가상시약-A정 (복용 일수 미기재):** 원문에 며칠 동안 먹어야 하는지 적혀있지 않습니다. 약국에 며칠 치 약인지 꼭 확인하세요.
-        - **가상시약-C정 (분할 주의):** 약을 쪼개거나 씹어 먹어도 되는지 전문가의 확인이 필요합니다.
-        """)
-    else:
-        st.info("문서를 업로드하고 '복약안내문으로 분석' 버튼을 눌러주세요.")
+[출력 JSON 구조]
+{
+  "document_type": "건강검진" 또는 "복약안내문" (문서 종류 판단),
+  "summary": "어르신도 이해하기 쉬운 2~3문장의 따뜻한 핵심 요약",
+  "items": [
+    {
+      "name": "검사항목명 또는 약품명",
+      "value": "검사수치 또는 1회용량/하루횟수",
+      "reference": "참고범위 또는 복용시점(아침/저녁 등)",
+      "status": "정상/주의/확인필요 중 하나",
+      "explanation": "이 항목(약)이 무엇인지, 현재 어떤 상태인지 어르신 눈높이에서 아주 쉽게 비유를 든 설명"
+    }
+  ],
+  "warnings": [
+    "문서에서 빠져 있어서 의사/약사에게 꼭 물어봐야 할 사항이나 주의점 (배열 형태로 여러 개 작성)"
+  ]
+}
+반드시 JSON 중괄호 {} 로만 대답하고 마크다운 문법(```json 등)은 쓰지 마세요.
+"""
 
-# ==========================================
-# 탭 3: 건강검진 분석 결과
-# ==========================================
-with tab3:
-    if st.session_state.analysis_type == "health":
-        st.subheader("📊 건강검진 분석 결과")
-        
-        # 1. 핵심 요약
-        st.info("💡 **핵심 요약**\n\n체질량지수(BMI)와 혈압이 참고범위를 다소 벗어나 주의가 필요합니다. 그 외 간 기능(AST) 수치 등은 정상 범위 내에 안정적으로 유지되고 있습니다.")
-        
-        # 2. 개별 검사항목에 대한 설명
-        st.markdown("### 🔍 개별 검사항목에 대한 설명")
-        health_data = [
-            {"검사항목": "체질량지수(BMI)", "결과값": "26.1", "참고범위": "18.5-24.9", "상태": "🔴 주의", "설명": "비만도를 나타내는 지표입니다. 체중 관리가 필요한 수치입니다."},
-            {"검사항목": "수축기혈압", "결과값": "134", "참고범위": "90-119", "상태": "🔴 주의", "설명": "심장이 수축할 때의 혈압으로, 정상 기준보다 다소 높습니다."},
-            {"검사항목": "AST", "결과값": "29", "참고범위": "0-40", "상태": "🟢 정상", "설명": "간세포 손상 여부를 확인하는 간 기능 효소 수치입니다."}
-        ]
-        st.dataframe(pd.DataFrame(health_data), use_container_width=True)
-        
-        # 3. 추가 확인이 필요한 사항
-        st.markdown("### ⚠️ 추가 확인이 필요한 사항")
-        st.error("""
-        - **공복혈당 (측정값 누락):** 원문에 공복혈당 수치가 기재되어 있지 않습니다. 이전 검사 결과가 있다면 비교해 보시거나, 다음 진료 시 꼭 검사를 요청하세요.
-        - **혈압 관리 (의료진 상담 권장):** 수축기 혈압이 지속적으로 높게 측정된다면, 진료 시 혈압 강하를 위한 생활 습관 개선에 대해 상담해 보세요.
-        """)
-    else:
-        st.info("문서를 업로드하고 '건강검진 결과지로 분석' 버튼을 눌러주세요.")
+uploaded_file = st.file_uploader("📄 건강검진 결과지나 약국 안내문 업로드 (PDF, JPG, PNG)", type=["pdf", "jpg", "png", "jpeg"])
+
+if uploaded_file and api_key:
+    if st.button("🤖 AI 문서 분석 시작", use_container_width=True):
+        with st.spinner("AI가 문서를 꼼꼼히 읽고, 어르신도 이해하기 쉽게 번역 중입니다... (약 10~20초 소요)"):
+            try:
+                # 1. 업로드된 파일을 임시 저장 (AI가 읽을 수 있도록)
+                file_extension = os.path.splitext(uploaded_file.name)[1]
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    tmp_path = tmp_file.name
+                
+                # 2. AI에게 파일 전송 및 분석 요청
+                myfile = genai.upload_file(tmp_path)
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content([myfile, SYSTEM_PROMPT])
+                
+                # 파일 정리
+                os.remove(tmp_path)
+                genai.delete_file(myfile.name)
+                
+                # 3. AI의 답변(JSON) 정리 및 화면 출력
+                result_text = response.text.strip().replace("```json", "").replace("```", "")
+                data = json.loads(result_text)
+                
+                # ======== 화면 출력 로직 ========
+                st.success("✅ 문서 분석 완료!")
+                
+                st.info(f"💡 **AI 핵심 요약**\n\n{data['summary']}")
+                
+                if data['document_type'] == "복약안내문":
+                    st.subheader("💊 스마트 복약 일정 (체크리스트)")
+                    for i, item in enumerate(data['items']):
+                        with st.expander(f"📍 {item['name']} ({item['reference']})", expanded=True):
+                            st.markdown(f"**투약량:** {item['value']}")
+                            st.write(f"**쉽게 설명해 드릴게요:** {item['explanation']}")
+                            st.checkbox(f"[{item['reference']}] {item['name']} 복용 완료!", key=f"chk_{i}")
+                
+                elif data['document_type'] == "건강검진":
+                    st.subheader("📊 건강 정보 포트폴리오")
+                    for item in data['items']:
+                        # 상태에 따른 색상/이모지
+                        if item['status'] == '정상':
+                            icon, color = "🟢", "normal"
+                        elif item['status'] == '주의':
+                            icon, color = "🔴", "inverse"
+                        else:
+                            icon, color = "⚠️", "off"
+                            
+                        with st.container(border=True):
+                            st.markdown(f"#### {icon} {item['name']}")
+                            col1, col2 = st.columns([1, 2])
+                            with col1:
+                                st.metric(label="나의 수치 (참고범위)", value=item['value'], delta=f"기준: {item['reference']}", delta_color=color)
+                            with col2:
+                                st.write("**🧑‍⚕️ AI의 쉬운 설명:**")
+                                st.write(item['explanation'])
+                
+                st.markdown("---")
+                st.subheader("⚠️ 꼭 확인하고 넘어가세요!")
+                if data['warnings']:
+                    for warn in data['warnings']:
+                        st.error(f"- {warn}")
+                else:
+                    st.success("- 현재 문서상으로 누락되거나 특별히 경고할 만한 위험 사항은 발견되지 않았습니다.")
+                
+            except Exception as e:
+                st.error("분석 중 오류가 발생했습니다. 파일이 흐리거나 API 키가 잘못되었을 수 있습니다.")
+                st.write(e)
+elif not api_key:
+    st.warning("👈 왼쪽 사이드바에서 AI API 키를 먼저 입력해 주세요.")
